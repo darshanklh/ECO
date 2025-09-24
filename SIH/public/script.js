@@ -7,7 +7,6 @@ import { getFirestore, collection, doc, setDoc, getDoc, onSnapshot, query, order
 import { getStorage, ref, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-storage.js";
 
 // PASTE YOUR GOOGLE GEMINI API KEY HERE
-const GEMINI_API_KEY = "AIzaSyAW838fQFzFfqBoNv6rYUHRdO6jOEL8eV8";
 
 document.addEventListener('DOMContentLoaded', () => {
     // --- Firebase Config & App Setup ---
