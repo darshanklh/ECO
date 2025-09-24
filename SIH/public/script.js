@@ -965,83 +965,89 @@ So, a forest isn't just a group of trees competing for space. It's a complex, in
      * Generates and starts a quiz using the Gemini API based on a video's transcript.
      * @param {string} videoId - The ID of the video from our videoLibrary.
      */
-    async function generateAndStartAIQuiz(videoId) {
-        const video = videoLibrary.find(v => v.id === videoId);
-        if (!video) {
-            console.error("Video not found!");
-            return;
-        }
-
-        // Show a loading indicator
-        const loadingModal = document.createElement('div');
-        loadingModal.className = "fixed inset-0 bg-gray-900/80 backdrop-blur-sm z-50 flex flex-col items-center justify-center p-4 text-center";
-        loadingModal.innerHTML = `
-        <p class="text-2xl font-semibold text-white animate-pulse">🤖 Accessing AI...</p>
-        <p class="text-white mt-2">Generating a custom quiz based on the video content. Please wait.</p>
-    `;
-        document.body.appendChild(loadingModal);
-
-        // This is the prompt we send to the AI
-        const prompt = `
-        Based on the following transcript from an environmental education video, please generate a multiple-choice quiz.
-
-        TRANSCRIPT: """
-        ${video.transcript}
-        """
-
-        INSTRUCTIONS:
-        1. Create exactly 5 multiple-choice questions.
-        2. Each question must have exactly 4 possible answers.
-        3. The questions should be relevant to the main points of the transcript.
-        4. Your entire response MUST be a single, valid JSON object. Do not include any text, explanations, or code formatting like \`\`\`json before or after the JSON object.
-        5. The JSON object must have a "title" key with a string value (use the video title: "${video.title}"), and a "questions" key, which is an array of question objects.
-        6. Each question object in the array must have three keys:
-            - "q": a string for the question text.
-            - "o": an array of 4 strings for the options.
-            - "a": an integer representing the index (0-3) of the correct answer in the "o" array.
-    `;
-
-        try {
-            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${GEMINI_API_KEY}`;
-
-            const response = await fetch(apiUrl, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    contents: [{
-                        parts: [{
-                            text: prompt
-                        }]
-                    }]
-                })
-            });
-
-            if (!response.ok) {
-                throw new Error(`API request failed with status ${response.status}`);
-            }
-
-            const result = await response.json();
-            const jsonText = result.candidates[0].content.parts[0].text;
-            const quizObject = JSON.parse(jsonText);
-
-            // Add other necessary properties for our quiz system
-            quizObject.id = `ai_${videoId}`;
-            quizObject.icon = '🤖';
-            quizObject.pointsPerCorrect = 15; // You can set a standard point value for AI quizzes
-
-            // Start the quiz with the generated object
-            startQuiz(quizObject);
-
-        } catch (error) {
-            console.error("Error generating AI quiz:", error);
-            alert("Sorry, the AI could not generate a quiz at this moment. Please check the API key or try again later.");
-        } finally {
-            // Remove the loading indicator
-            loadingModal.remove();
-        }
+   /**
+ * Generates and starts a quiz by securely calling our Vercel serverless function.
+ * @param {string} videoId - The ID of the video from our videoLibrary.
+ */
+async function generateAndStartAIQuiz(videoId) {
+    const video = videoLibrary.find(v => v.id === videoId);
+    if (!video) {
+        console.error("Video not found!");
+        return;
     }
+
+    // Show a loading indicator (no change here)
+    const loadingModal = document.createElement('div');
+    loadingModal.className = "fixed inset-0 bg-gray-900/80 backdrop-blur-sm z-50 flex flex-col items-center justify-center p-4 text-center";
+    loadingModal.innerHTML = `
+    <p class="text-2xl font-semibold text-white animate-pulse">🤖 Accessing AI...</p>
+    <p class="text-white mt-2">Generating a custom quiz based on the video content. Please wait.</p>
+    `;
+    document.body.appendChild(loadingModal);
+
+    // This is the same prompt you used before
+    const prompt = `
+    Based on the following transcript from an environmental education video, please generate a multiple-choice quiz.
+
+    TRANSCRIPT: """
+    ${video.transcript}
+    """
+
+    INSTRUCTIONS:
+    1. Create exactly 5 multiple-choice questions.
+    2. Each question must have exactly 4 possible answers.
+    3. The questions should be relevant to the main points of the transcript.
+    4. Your entire response MUST be a single, valid JSON object. Do not include any text, explanations, or code formatting like \`\`\`json before or after the JSON object.
+    5. The JSON object must have a "title" key with a string value (use the video title: "${video.title}"), and a "questions" key, which is an array of question objects.
+    6. Each question object in the array must have three keys:
+        - "q": a string for the question text.
+        - "o": an array of 4 strings for the options.
+        - "a": an integer representing the index (0-3) of the correct answer in the "o" array.
+    `;
+
+    try {
+        // ===================================================================
+        // ▼▼▼ THIS IS THE ONLY SECTION THAT HAS CHANGED ▼▼▼
+        // ===================================================================
+
+        // 1. We now call our OWN secure endpoint, not Google's API.
+        //    The API key is never mentioned here.
+        const response = await fetch('/api/generateQuiz', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            // 2. We send the prompt in the body so our server function can use it.
+            body: JSON.stringify({ prompt: prompt })
+        });
+
+        if (!response.ok) {
+            // This handles errors if our own server function fails.
+            throw new Error(`Server function failed with status: ${response.status}`);
+        }
+
+        // 3. Our server already processed the result, so we just grab the final JSON.
+        const quizObject = await response.json();
+
+        // ===================================================================
+        // ▲▲▲ END OF CHANGED SECTION ▲▲▲
+        // ===================================================================
+
+        // The rest of this function is the same as before.
+        quizObject.id = `ai_${videoId}`;
+        quizObject.icon = '🤖';
+        quizObject.pointsPerCorrect = 15;
+
+        startQuiz(quizObject);
+
+    } catch (error) {
+        console.error("Error generating AI quiz:", error);
+        alert("Sorry, the AI could not generate a quiz at this moment. Please try again later.");
+    } finally {
+        // Remove the loading indicator (no change here)
+        loadingModal.remove();
+    }
+}
 
     function openSubmissionModal(challenge) {
         currentChallenge = challenge;
